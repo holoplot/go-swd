@@ -4,42 +4,45 @@ import (
 	"testing"
 )
 
-func TestTransaction_StartByte(t *testing.T) {
-	type fields struct {
-		AccessPort bool
-		Write      bool
-		Address    uint8
-		Data       uint32
-	}
+func TestRequestByte(t *testing.T) {
 	tests := []struct {
-		name   string
-		fields fields
-		want   uint8
+		name string
+		tx   *Transaction
+		want RequestByte
 	}{
 		{
 			name: "1",
-			fields: fields{
-				AccessPort: false,
-				Write:      false,
-				Address:    0,
+			tx: &Transaction{
+				PortType:  DebugPort,
+				Direction: DirectionWrite,
+				Address:   0x00,
 			},
 			want: 0x81,
 		},
 		{
 			name: "2",
-			fields: fields{
-				AccessPort: true,
-				Write:      false,
-				Address:    0,
+			tx: &Transaction{
+				PortType:  DebugPort,
+				Direction: DirectionWrite,
+				Address:   0x04,
 			},
-			want: 0xa3,
+			want: 0xa9,
 		},
 		{
 			name: "3",
-			fields: fields{
-				AccessPort: true,
-				Write:      true,
-				Address:    3,
+			tx: &Transaction{
+				PortType:  DebugPort,
+				Direction: DirectionRead,
+				Address:   0x0c,
+			},
+			want: 0xbd,
+		},
+		{
+			name: "4",
+			tx: &Transaction{
+				PortType:  AccessPort,
+				Direction: DirectionRead,
+				Address:   0x0c,
 			},
 			want: 0x9f,
 		},
@@ -47,14 +50,8 @@ func TestTransaction_StartByte(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tx := &Transaction{
-				AccessPort: tt.fields.AccessPort,
-				Write:      tt.fields.Write,
-				Address:    tt.fields.Address,
-				Data:       tt.fields.Data,
-			}
-			if got := tx.StartByte(); got != tt.want {
-				t.Errorf("Transaction.StartByteParity() = %v, want %v", got, tt.want)
+			if got := tt.tx.RequestByte(); got != tt.want {
+				t.Errorf("Transaction.RequestByte() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -62,46 +59,40 @@ func TestTransaction_StartByte(t *testing.T) {
 
 func TestTransaction_DataParity(t *testing.T) {
 	type fields struct {
-		AccessPort bool
-		Write      bool
-		Address    uint8
-		Data       uint32
+		Data uint32
 	}
 	tests := []struct {
 		name   string
 		fields fields
-		want   uint8
+		want   Parity
 	}{
 		{
 			name: "1",
 			fields: fields{
 				Data: 0x00000000,
 			},
-			want: 0,
+			want: ParityEven,
 		},
 		{
 			name: "2",
 			fields: fields{
 				Data: 0x00010000,
 			},
-			want: 1,
+			want: ParityOdd,
 		},
 		{
 			name: "3",
 			fields: fields{
 				Data: 0xffffffff,
 			},
-			want: 0,
+			want: ParityEven,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tx := &Transaction{
-				AccessPort: tt.fields.AccessPort,
-				Write:      tt.fields.Write,
-				Address:    tt.fields.Address,
-				Data:       tt.fields.Data,
+				Data: tt.fields.Data,
 			}
 			if got := tx.DataParity(); got != tt.want {
 				t.Errorf("Transaction.DataParity() = %v, want %v", got, tt.want)

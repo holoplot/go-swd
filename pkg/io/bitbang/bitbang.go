@@ -87,11 +87,23 @@ func (bb *BitBang) dummyClockCycle() error {
 	return nil
 }
 
-func (bb *BitBang) Reset() error {
-	for i := 0; i < 2; i++ {
-		if err := bb.write(0xffffffff, 32); err != nil {
+func (bb *BitBang) LineReset() error {
+	if err := bb.hw.SetDataDirectionOutput(); err != nil {
+		return err
+	}
+
+	if err := bb.hw.SetData(1); err != nil {
+		return err
+	}
+
+	for i := 0; i < 54; i++ {
+		if err := bb.dummyClockCycle(); err != nil {
 			return err
 		}
+	}
+
+	if err := bb.write(0, 1); err != nil {
+		return err
 	}
 
 	return nil
@@ -102,7 +114,7 @@ func (bb *BitBang) Tx(tx *io.Transaction) error {
 		return err
 	}
 
-	if err := bb.write(uint32(tx.StartByte()), 8); err != nil {
+	if err := bb.write(uint32(tx.RequestByte()), 8); err != nil {
 		return err
 	}
 
@@ -119,15 +131,22 @@ func (bb *BitBang) Tx(tx *io.Transaction) error {
 		return err
 	}
 
-	if ack != io.AckOk {
+	tx.Ack = io.Ack(ack)
+
+	if tx.Ack != io.AckOk && tx.Ack != io.AckWait {
+		if err := bb.dummyClockCycle(); err != nil {
+			return err
+		}
+
 		return io.ErrBadAck
 	}
 
-	if err := bb.dummyClockCycle(); err != nil {
-		return err
-	}
+	if tx.Direction == io.DirectionWrite {
+		// Turnaround
+		if err := bb.dummyClockCycle(); err != nil {
+			return err
+		}
 
-	if tx.Write {
 		if err := bb.hw.SetDataDirectionOutput(); err != nil {
 			return err
 		}
@@ -136,7 +155,7 @@ func (bb *BitBang) Tx(tx *io.Transaction) error {
 			return err
 		}
 
-		if err := bb.write(uint32(tx.DataParity()), 1); err != nil {
+		if err := bb.write(uint32(tx.DataParity().Bit()), 1); err != nil {
 			return err
 		}
 	} else {
@@ -152,9 +171,13 @@ func (bb *BitBang) Tx(tx *io.Transaction) error {
 			return err
 		}
 
-		if uint8(parity) != tx.DataParity() {
+		if parity != tx.DataParity().Bit() {
 			return io.ErrBadParity
 		}
+	}
+
+	if err := bb.hw.SetDataDirectionOutput(); err != nil {
+		return err
 	}
 
 	// dummy write to keep the interface running for at least 8 cycles

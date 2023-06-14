@@ -6,6 +6,6 @@ github.com/stianeikeland/go-rpio v3.0.0+incompatible/go.mod h1:Sh81rdJwD96E2wja2
 github.com/stretchr/testify v1.8.1 h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=
 github.com/warthog618/gpiod v0.8.1 h1:+8iHpHd3fljAd6l4AT8jPbMDQNKdvBIpW/hmLgAcHiM=
 github.com/warthog618/gpiod v0.8.1/go.mod h1:A7v1hGR2eTsnkN+e9RoAPYgJG9bLJWtwyIIK+pgqC7s=
-golang.org/x/sys v0.3.0 h1:w8ZOecv6NaNa/zC8944JTU3vz4u6Lagfk4RPQxv92NQ=
-golang.org/x/sys v0.3.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.6.0 h1:MVltZSvRTcU2ljQOhs94SXPftV6DCNnZViHeQps87pQ=
+golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=

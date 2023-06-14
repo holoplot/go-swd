@@ -48,7 +48,10 @@ func (l *rpiGPIOhw) SetDataDirectionOutput() error {
 	return nil
 }
 
-func (l *rpiGPIOhw) Close() {}
+func (l *rpiGPIOhw) Close() {
+	l.io.Input()
+	l.clk.Input()
+}
 
 func NewRPI(chip string, ioGPIO, clkGPIO, frequency int) (*BitBang, error) {
 	hw := &rpiGPIOhw{

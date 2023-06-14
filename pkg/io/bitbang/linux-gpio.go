@@ -4,6 +4,8 @@
 package bitbang
 
 import (
+	"fmt"
+
 	"github.com/warthog618/gpiod"
 )
 
@@ -13,26 +15,49 @@ type linuxGPIOhw struct {
 }
 
 func (l *linuxGPIOhw) SetClock(v int) error {
-	return l.clk.SetValue(v)
+	if err := l.clk.SetValue(v); err != nil {
+		return fmt.Errorf("error setting clock line: %w", err)
+	}
+
+	return nil
 }
 
 func (l *linuxGPIOhw) SetData(v int) error {
-	return l.io.SetValue(v)
+	if err := l.io.SetValue(v); err != nil {
+		return fmt.Errorf("error setting data line: %w", err)
+	}
+
+	return nil
 }
 
 func (l *linuxGPIOhw) GetData() (int, error) {
-	return l.io.Value()
+	if v, err := l.io.Value(); err != nil {
+		return 0, fmt.Errorf("error reading data line: %w", err)
+	} else {
+		return v, nil
+	}
 }
 
 func (l *linuxGPIOhw) SetDataDirectionInput() error {
-	return l.io.Reconfigure(gpiod.AsInput)
+	if err := l.io.Reconfigure(gpiod.AsInput); err != nil {
+		return fmt.Errorf("error setting data line to output direction: %w", err)
+	}
+
+	return nil
 }
 
 func (l *linuxGPIOhw) SetDataDirectionOutput() error {
-	return l.io.Reconfigure(gpiod.AsOutput(0))
+	if err := l.io.Reconfigure(gpiod.AsOutput(0)); err != nil {
+		return fmt.Errorf("error setting data line to input direction: %w", err)
+	}
+
+	return nil
 }
 
 func (l *linuxGPIOhw) Close() {
+	_ = l.io.Reconfigure(gpiod.AsInput)
+	_ = l.clk.Reconfigure(gpiod.AsInput)
+
 	l.io.Close()
 	l.clk.Close()
 }

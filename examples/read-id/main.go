@@ -8,14 +8,23 @@ import (
 )
 
 func main() {
-	linuxGPIO, err := bitbang.NewLinuxGPIO("/dev/gpiochip0", 17, 27, 100000)
+	linuxGPIO, err := bitbang.NewLinuxGPIO("/dev/gpiochip1", 81, 80, 1000000)
 	if err != nil {
+		panic(err)
+	}
+
+	if err := linuxGPIO.LineReset(); err != nil {
 		panic(err)
 	}
 
 	swd := swd.New(linuxGPIO)
 
 	idcode, err := swd.IDCode()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	idcode, err = swd.IDCode()
 	if err != nil {
 		panic(err)
 	}

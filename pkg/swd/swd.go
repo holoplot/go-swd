@@ -42,6 +42,7 @@ func (s *SWD) writeTx(name string, portType io.PortType, addr io.Address, data u
 		}
 
 		// Repeat on AckWait
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -66,6 +67,7 @@ func (s *SWD) readTx(name string, portType io.PortType, addr io.Address) (uint32
 		}
 
 		// Repeat on AckWait
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -189,6 +191,18 @@ func (s *SWD) ReadRegister(addr uint32) (uint32, error) {
 	}
 
 	return s.ReadDRW()
+}
+
+func (s *SWD) UpdateRegisterBits(addr, mask, data uint32) error {
+	v, err := s.ReadRegister(addr)
+	if err != nil {
+		return err
+	}
+
+	v &= ^mask
+	v |= data & mask
+
+	return s.WriteRegister(addr, v)
 }
 
 func (s *SWD) IDCode() (uint32, error) {

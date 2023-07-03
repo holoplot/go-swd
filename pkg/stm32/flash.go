@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/holoplot/go-swd/pkg/swd"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -24,6 +25,17 @@ const (
 
 	flashKey1 = 0x45670123
 	flashKey2 = 0xcdef89ab
+)
+
+type acrRegister uint32
+
+const (
+	acrRegisterLatencyMask       acrRegister = 0x7
+	acrRegisterCPUPrefetchEnable acrRegister = 1 << 8
+	acrRegisterInstructionCache  acrRegister = 1 << 9
+	acrRegisterDataCache         acrRegister = 1 << 11
+	acrEmpty                     acrRegister = 1 << 16
+	acrDebugEnable               acrRegister = 1 << 18
 )
 
 type statusRegister uint32
@@ -52,14 +64,15 @@ const (
 	controlRegisterStart                 controlRegister = 1 << 16
 	controlRegisterOptionStart           controlRegister = 1 << 17
 	controlRegisterOptionFastProgramming controlRegister = 1 << 18
-
-	controlRegisterOptLock controlRegister = 1 << 30
-	controlRegisterLock    controlRegister = 1 << 31
+	controlRegisterEndOfOperation        controlRegister = 1 << 24
+	controlRegisterOptLock               controlRegister = 1 << 30
+	controlRegisterLock                  controlRegister = 1 << 31
 )
 
 type Flash struct {
 	swd        *swd.SWD
 	isWritable bool
+	pllEnabled bool
 }
 
 func (f *Flash) Read(addr, size uint32, writer io.Writer) error {
@@ -78,19 +91,48 @@ func (f *Flash) Read(addr, size uint32, writer io.Writer) error {
 }
 
 func (f *Flash) makeWriteable() error {
-	if f.isWritable {
-		return nil
+	if !f.pllEnabled {
+		log.Info().Msgf("Enable PLL!!")
+
+		if err := f.swd.WriteRegister(0x40021008, 0x00000002); err != nil {
+			return err
+		}
+
+		if err := f.swd.WriteRegister(0x4002100c, 0xF60A1812); err != nil {
+			return err
+		}
+
+		if err := f.swd.WriteRegister(0x40021000, 0x1000500); err != nil {
+			return err
+		}
+
+		// for {
+		// 	val, err := f.swd.ReadRegister(0x40021000)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+
+		// 	log.Info().Msgf("RCC CR: 0x%08x", val)
+
+		// 	if val&(1<<25) != 0 {
+		// 		break
+		// 	}
+		// }
+
+		f.pllEnabled = true
 	}
 
-	if err := f.swd.WriteRegister(regKEYR, flashKey1); err != nil {
-		return err
-	}
+	if !f.isWritable {
+		if err := f.swd.WriteRegister(regKEYR, flashKey1); err != nil {
+			return err
+		}
 
-	if err := f.swd.WriteRegister(regKEYR, flashKey2); err != nil {
-		return err
-	}
+		if err := f.swd.WriteRegister(regKEYR, flashKey2); err != nil {
+			return err
+		}
 
-	f.isWritable = true
+		f.isWritable = true
+	}
 
 	return nil
 }
@@ -106,6 +148,45 @@ func (f *Flash) clearErrors() error {
 		statusRegisterFastProgrammingError
 
 	return f.swd.WriteRegister(regSR, uint32(clr))
+}
+
+func (f *Flash) waitForCompletion() error {
+	var sr statusRegister
+
+	defer func() {
+		_ = f.swd.WriteRegister(regSR, uint32(sr))
+	}()
+
+	for {
+		val, err := f.swd.ReadRegister(regSR)
+		if err != nil {
+			return err
+		}
+
+		sr = statusRegister(val)
+
+		log.Info().Msgf("SR: 0x%08x", sr)
+
+		if sr&statusRegisterProgrammingAlignmentError != 0 {
+			return fmt.Errorf("programming alignment error")
+		}
+
+		if sr&statusRegisterProgrammingError != 0 {
+			return fmt.Errorf("programming error")
+		}
+
+		if sr&statusRegisterOperationError != 0 {
+			return fmt.Errorf("operation error")
+		}
+
+		if sr&(statusRegisterBusy1|statusRegisterEndOfOperation) == statusRegisterEndOfOperation {
+			panic("end of operation")
+
+			return nil
+		}
+
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func (f *Flash) Write(addr uint32, reader io.Reader) error {
@@ -130,7 +211,7 @@ func (f *Flash) Write(addr uint32, reader io.Reader) error {
 		return err
 	}
 
-	if err := f.swd.WriteRegister(regCR, uint32(controlRegisterPg)); err != nil {
+	if err := f.swd.WriteRegister(regCR, uint32(controlRegisterPg|controlRegisterEndOfOperation)); err != nil {
 		return err
 	}
 
@@ -172,38 +253,19 @@ func (f *Flash) Write(addr uint32, reader io.Reader) error {
 
 		addr += 4
 
-		for {
-			if busy, err := f.busy(); err != nil {
-				return err
-			} else if !busy {
-				break
-			}
-		}
-
-		sr, err := f.swd.ReadRegister(regSR)
-		if err != nil {
+		if err := f.waitForCompletion(); err != nil {
 			return err
 		}
+	}
 
-		if sr&uint32(statusRegisterProgrammingAlignmentError) != 0 {
-			return fmt.Errorf("programming alignment error")
-		}
+	log.Info().Msgf("Flash write done")
 
-		if sr&uint32(statusRegisterProgrammingError) != 0 {
-			return fmt.Errorf("programming error")
-		}
-
-		if sr&uint32(statusRegisterOperationError) != 0 {
-			return fmt.Errorf("operation error")
-		}
-
-		// if sr&uint32(statusRegisterEndOfOperation) == 0 {
-		// 	return fmt.Errorf("No EOP")
-		// }
-
-		// if err := f.swd.WriteRegister(regSR, uint32(statusRegisterEndOfOperation)); err != nil {
-		// 	return err
-		// }
+	// Clear EMPTY bit
+	// if err := f.swd.UpdateRegisterBits(regACR, uint32(acrEmpty|acrRegisterLatencyMask), 2); err != nil {
+	// 	return err
+	// }
+	if err := f.swd.WriteRegister(regACR, 2); err != nil {
+		return err
 	}
 
 	return nil
@@ -252,6 +314,13 @@ func (f *Flash) Initialize() error {
 		return err
 	} else if busy {
 		return fmt.Errorf("flash is busy")
+	}
+
+	// if err := f.swd.UpdateRegisterBits(regACR, uint32(acrRegisterLatencyMask), 2); err != nil {
+	// 	return err
+	// }
+	if err := f.swd.WriteRegister(regACR, 2); err != nil {
+		return err
 	}
 
 	cr, err := f.swd.ReadRegister(regCR)

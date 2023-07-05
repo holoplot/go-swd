@@ -3,8 +3,13 @@ package coredebug
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/holoplot/go-swd/pkg/swd"
+)
+
+const (
+	retries = 10
 )
 
 type CoreDebug struct {
@@ -82,7 +87,11 @@ func (cd *CoreDebug) Halt() error {
 		return err
 	}
 
-	for n := 0; n < 3; n++ {
+	if err := cd.WriteDHCSR(DHCSRDebugKey | DHCSRCDebugEn | DHCSRCHalt | DHCSRCMaskInts); err != nil {
+		return err
+	}
+
+	for n := 0; n < retries; n++ {
 		dhcsr, err := cd.ReadDHCSR()
 		if err != nil {
 			return fmt.Errorf("error reading DHCSR: %w", err)
@@ -91,6 +100,8 @@ func (cd *CoreDebug) Halt() error {
 		if dhcsr&DHCSRSHalt != 0 {
 			return nil
 		}
+
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	return ErrTimeout
@@ -101,7 +112,7 @@ func (cd *CoreDebug) Continue() error {
 		return err
 	}
 
-	for n := 0; n < 3; n++ {
+	for n := 0; n < retries; n++ {
 		dhcsr, err := cd.ReadDHCSR()
 		if err != nil {
 			return fmt.Errorf("error reading DHCSR: %w", err)
@@ -110,6 +121,8 @@ func (cd *CoreDebug) Continue() error {
 		if dhcsr&DHCSRSHalt == 0 {
 			return nil
 		}
+
+		time.Sleep(time.Millisecond)
 	}
 
 	return ErrTimeout
@@ -120,7 +133,9 @@ func (cd *CoreDebug) RunAfterReset() error {
 		return err
 	}
 
-	for n := 0; n < 3; n++ {
+	return nil
+
+	for n := 0; n < retries; n++ {
 		dhcsr, err := cd.ReadDHCSR()
 		if err != nil {
 			return fmt.Errorf("error reading DHCSR: %w", err)
@@ -129,6 +144,8 @@ func (cd *CoreDebug) RunAfterReset() error {
 		if dhcsr&DHCSRSHalt == 0 {
 			return nil
 		}
+
+		time.Sleep(time.Millisecond)
 	}
 
 	return ErrTimeout

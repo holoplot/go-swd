@@ -13,6 +13,9 @@ const (
 	regApCSW io.Address = 0x0
 	regApTAR io.Address = 0x4
 	regApDRW io.Address = 0xc
+
+	regBase io.Address = 0xf8
+	regIDR  io.Address = 0xfc
 )
 
 type AbortFlags uint32

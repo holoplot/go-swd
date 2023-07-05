@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/holoplot/go-swd/pkg/swd"
-	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -91,37 +90,6 @@ func (f *Flash) Read(addr, size uint32, writer io.Writer) error {
 }
 
 func (f *Flash) makeWriteable() error {
-	if !f.pllEnabled {
-		log.Info().Msgf("Enable PLL!!")
-
-		if err := f.swd.WriteRegister(0x40021008, 0x00000002); err != nil {
-			return err
-		}
-
-		if err := f.swd.WriteRegister(0x4002100c, 0xF60A1812); err != nil {
-			return err
-		}
-
-		if err := f.swd.WriteRegister(0x40021000, 0x1000500); err != nil {
-			return err
-		}
-
-		// for {
-		// 	val, err := f.swd.ReadRegister(0x40021000)
-		// 	if err != nil {
-		// 		return err
-		// 	}
-
-		// 	log.Info().Msgf("RCC CR: 0x%08x", val)
-
-		// 	if val&(1<<25) != 0 {
-		// 		break
-		// 	}
-		// }
-
-		f.pllEnabled = true
-	}
-
 	if !f.isWritable {
 		if err := f.swd.WriteRegister(regKEYR, flashKey1); err != nil {
 			return err
@@ -165,8 +133,6 @@ func (f *Flash) waitForCompletion() error {
 
 		sr = statusRegister(val)
 
-		log.Info().Msgf("SR: 0x%08x", sr)
-
 		if sr&statusRegisterProgrammingAlignmentError != 0 {
 			return fmt.Errorf("programming alignment error")
 		}
@@ -180,8 +146,6 @@ func (f *Flash) waitForCompletion() error {
 		}
 
 		if sr&(statusRegisterBusy1|statusRegisterEndOfOperation) == statusRegisterEndOfOperation {
-			panic("end of operation")
-
 			return nil
 		}
 
@@ -258,13 +222,8 @@ func (f *Flash) Write(addr uint32, reader io.Reader) error {
 		}
 	}
 
-	log.Info().Msgf("Flash write done")
-
 	// Clear EMPTY bit
-	// if err := f.swd.UpdateRegisterBits(regACR, uint32(acrEmpty|acrRegisterLatencyMask), 2); err != nil {
-	// 	return err
-	// }
-	if err := f.swd.WriteRegister(regACR, 2); err != nil {
+	if err := f.swd.WriteRegister(regACR, uint32(2|acrRegisterInstructionCache|acrDebugEnable)); err != nil {
 		return err
 	}
 
@@ -297,13 +256,13 @@ func (f *Flash) EraseAll(timeout time.Duration) error {
 	start := time.Now()
 
 	for time.Since(start) < timeout {
+		time.Sleep(time.Millisecond * 100)
+
 		if busy, err := f.busy(); err != nil {
 			return err
 		} else if !busy {
 			return nil
 		}
-
-		time.Sleep(time.Millisecond * 100)
 	}
 
 	return ErrTimeout
@@ -314,13 +273,6 @@ func (f *Flash) Initialize() error {
 		return err
 	} else if busy {
 		return fmt.Errorf("flash is busy")
-	}
-
-	// if err := f.swd.UpdateRegisterBits(regACR, uint32(acrRegisterLatencyMask), 2); err != nil {
-	// 	return err
-	// }
-	if err := f.swd.WriteRegister(regACR, 2); err != nil {
-		return err
 	}
 
 	cr, err := f.swd.ReadRegister(regCR)

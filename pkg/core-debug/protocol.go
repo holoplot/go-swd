@@ -7,7 +7,7 @@ type DHCSR uint32
 
 const (
 	// Read-write
-	DHCSRDebugKey  DHCSR = 0xa05f0000
+	DHCSRDebugKey  DHCSR = 0xa05f << 16
 	DHCSRCDebugEn  DHCSR = 1 << 0
 	DHCSRCHalt     DHCSR = 1 << 1
 	DHCSRCStep     DHCSR = 1 << 2
@@ -15,12 +15,12 @@ const (
 	DHCSRCSnapAll  DHCSR = 1 << 5
 
 	// Read-only
-	DHCSRSRegReady      DHCSR = 1 << 16
-	DHCSRSHalt          DHCSR = 1 << 17
-	DHCSRSSleep         DHCSR = 1 << 18
-	DHCSRSLockup        DHCSR = 1 << 19
-	DHCSRSRretireStatus DHCSR = 1 << 24
-	DHCSRSResetStatus   DHCSR = 1 << 25
+	DHCSRSRegReady     DHCSR = 1 << 16
+	DHCSRSHalt         DHCSR = 1 << 17
+	DHCSRSSleep        DHCSR = 1 << 18
+	DHCSRSLockup       DHCSR = 1 << 19
+	DHCSRSRetireStatus DHCSR = 1 << 24
+	DHCSRSResetStatus  DHCSR = 1 << 25
 )
 
 // Debug Core Register Selector Register
@@ -59,5 +59,5 @@ const (
 	regDHCSR = baseAddress + 0x0
 	regDCRSR = baseAddress + 0x4
 	regDCRDR = baseAddress + 0x8
-	regDEMCR = baseAddress + 0xC
+	regDEMCR = baseAddress + 0xc
 )

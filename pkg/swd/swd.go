@@ -75,8 +75,8 @@ func (s *SWD) Abort(flags AbortFlags) error {
 	return s.writeTx("ABORT", io.DebugPort, regAbort, uint32(flags))
 }
 
-func (s *SWD) Select(accessPort uint32, bank uint8) error {
-	v := (accessPort << 24) | (uint32(bank) >> 4)
+func (s *SWD) Select(accessPort uint32, bank uint8, low uint8) error {
+	v := (accessPort << 24) | (uint32(bank) << 4) | uint32(low)
 
 	if s.currentSelect == v {
 		return nil
@@ -92,7 +92,7 @@ func (s *SWD) Select(accessPort uint32, bank uint8) error {
 }
 
 func (s *SWD) WriteMemAP(name string, addr io.Address, data uint32) error {
-	if err := s.Select(0, uint8(addr)); err != nil {
+	if err := s.Select(0, uint8(addr>>4), 0); err != nil {
 		return err
 	}
 
@@ -106,7 +106,7 @@ func (s *SWD) ReadRdBuff() (uint32, error) {
 }
 
 func (s *SWD) ReadMemAP(name string, addr io.Address) (uint32, error) {
-	if err := s.Select(0, uint8(addr)); err != nil {
+	if err := s.Select(0, uint8(addr>>4), 0); err != nil {
 		return 0, fmt.Errorf("select: %w", err)
 	}
 
@@ -162,10 +162,6 @@ func (s *SWD) ReadDRW() (uint32, error) {
 }
 
 func (s *SWD) WriteRegister(addr uint32, data uint32) error {
-	// if err := s.UpdateCSW(CSWSize32bit, CSWSizeMask); err != nil {
-	// 	return fmt.Errorf("update csw: %w", err)
-	// }
-
 	if err := s.WriteTAR(addr); err != nil {
 		return fmt.Errorf("write TAR: %w", err)
 	}
@@ -190,7 +186,16 @@ func (s *SWD) ReadRegister(addr uint32) (uint32, error) {
 		return 0, err
 	}
 
-	return s.ReadDRW()
+	drw, err := s.ReadDRW()
+	if err != nil {
+		return 0, err
+	}
+
+	if _, err := s.ReadCtrlStat(); err != nil {
+		return 0, fmt.Errorf("read ctrlstat: %w", err)
+	}
+
+	return drw, nil
 }
 
 func (s *SWD) UpdateRegisterBits(addr, mask, data uint32) error {
@@ -227,7 +232,8 @@ func (s *SWD) PowerOnReset() error {
 		CtrlStatSystemPowerUpRequest
 
 	if err := s.WriteCtrlStat(ctrlStat); err != nil {
-		s.ReadCtrlStat()
+		// dummy read
+		_, _ = s.ReadCtrlStat()
 
 		return err
 	}
@@ -257,19 +263,35 @@ func (s *SWD) Initialize() (uint32, error) {
 			return 0, fmt.Errorf("line reset: %w", err)
 		}
 
+		if err := s.accessor.LineReset(); err != nil {
+			return 0, fmt.Errorf("line reset: %w", err)
+		}
+
 		id, err := s.IDCode()
 		if err != nil {
 			return 0, fmt.Errorf("idcode read: %w", err)
 		}
 
-		if err := s.PowerOnReset(); err == nil {
-			return id, nil
-		}
+		err = s.PowerOnReset()
 
 		_ = s.Abort(AbortAllFlags())
 
+		if err == nil {
+			_ = s.Select(0, 0, 2)
+			_, _ = s.ReadCtrlStat()
+			_ = s.Select(0, 0xf, 0)
+
+			_, _ = s.ReadCtrlStat()
+
+			return id, nil
+		}
+
 		time.Sleep(time.Millisecond)
 	}
+
+	// if err := s.UpdateCSW(CSWSize32bit, CSWSizeMask); err != nil {
+	// 	return 0, fmt.Errorf("update csw: %w", err)
+	// }
 
 	return 0, ErrTimeout
 }
